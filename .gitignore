@@ -1,0 +1,56 @@
+# ── Python ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ── Virtual environments ────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Pipeline outputs / working data ─────────────────────────────────────
+# 生成物・中間データはコミットしない（巨大・再生成可能）
+output/
+outputs/
+out/
+*.db                 # COLMAP database.db
+frames/
+cubemap/
+masked/
+sparse/
+
+# ── Media / model assets ────────────────────────────────────────────────
+# 入力動画・画像・点群・学習済みモデルは管理外（容量大）
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mts
+*.ply
+*.pth
+*.pt
+*.onnx
+
+# ── User-specific config ────────────────────────────────────────────────
+# default.ini は雛形として追跡する。個人の実験用設定は無視。
+config/local.ini
+config/*.local.ini
+
+# ── Logs ────────────────────────────────────────────────────────────────
+*.log
+
+# ── Claude Code ─────────────────────────────────────────────────────────
+.claude/
+
+# ── IDE / OS ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
