@@ -45,11 +45,11 @@ from registry import MASKING, SFM, FRAME_FILTER
 
 # ── logging setup ──────────────────────────────────────────────────────────
 
-def _setup_logging(verbose: bool) -> None:
+def _make_streams_utf8_safe() -> None:
     # On a Japanese Windows console the default stream encoding is cp932; non-ASCII
-    # characters in log messages (→, —, file paths) raise UnicodeEncodeError when
-    # output is redirected to a file or pipe. Force UTF-8 with a safe fallback so
-    # logging never crashes the pipeline regardless of console codepage.
+    # characters (→, —, file paths) in log messages AND in argparse help/error text
+    # raise UnicodeEncodeError. Force UTF-8 with a safe fallback. Must run BEFORE
+    # argparse (which may print help/errors and exit) and before any logging.
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
@@ -58,6 +58,9 @@ def _setup_logging(verbose: bool) -> None:
             except (ValueError, OSError):
                 pass
 
+
+def _setup_logging(verbose: bool) -> None:
+    _make_streams_utf8_safe()
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -152,6 +155,11 @@ def _apply_overrides(cfg: Config, overrides: list[str]) -> None:
 
 # ── CLI ────────────────────────────────────────────────────────────────────
 
+# Resolve the bundled default config relative to THIS file, not the current
+# working directory — so the pipeline can be launched from anywhere.
+_DEFAULT_CONFIG = Path(__file__).resolve().parent / "config" / "default.ini"
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="360Gaussian Pipeline",
@@ -161,8 +169,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("input", type=Path, help="Input video file or folder of images")
     parser.add_argument("output", type=Path, help="Output / working directory")
     parser.add_argument(
-        "--config", type=Path, default=Path("config/default.ini"),
-        help="Path to pipeline config INI file (default: config/default.ini)",
+        "--config", type=Path, default=_DEFAULT_CONFIG,
+        help=f"Path to pipeline config INI file (default: {_DEFAULT_CONFIG})",
     )
     parser.add_argument(
         "--masker", default="automasker",
@@ -195,6 +203,8 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> int:
+    # Make output UTF-8 safe before argparse may print help/errors (cp932 consoles).
+    _make_streams_utf8_safe()
     args = parse_args(argv)
     _setup_logging(args.verbose)
     logger = logging.getLogger(__name__)

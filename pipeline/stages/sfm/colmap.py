@@ -24,8 +24,11 @@ class COLMAPStage(Stage):
 
     def __init__(self, cfg: Config) -> None:
         super().__init__(cfg)
+        # An unset config value normalizes to Path("") == Path("."); treat "" and
+        # "." as "not configured" and fall back to PATH resolution.
         colmap_path = cfg.colmap_paths.colmappath
-        self._exe = colmap_path if str(colmap_path) else Path("colmap")
+        is_set = str(colmap_path) not in ("", ".")
+        self._exe = colmap_path if is_set else Path("colmap")
 
     @property
     def name(self) -> str:

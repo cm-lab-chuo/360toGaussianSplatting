@@ -49,11 +49,17 @@ class AutoMaskerStage(Stage):
         paths = self.cfg.automasker_paths
         settings = self.cfg.automasker
 
+        # An unset config path normalizes to Path("") == Path("."), and "." passes
+        # .exists() (it's the current dir), so check is_file() and reject empty.
+        def _is_real_file(p: Path) -> bool:
+            return str(p) not in ("", ".") and p.is_file()
+
         exe = paths.automaskerpath
-        if not exe.exists():
+        if not _is_real_file(exe):
             raise FileNotFoundError(
-                f"AutoMasker not found at {exe}\n"
-                "Update [AutoMaskerPaths] automaskerpath in your config."
+                f"AutoMasker executable not set or not found: '{exe}'\n"
+                "Set [AutoMaskerPaths] automaskerpath in your config, or pass "
+                "--config <path-to-default.ini>. (Did the config fail to load?)"
             )
 
         out_dir = ctx.stage_dir("masked")
@@ -79,13 +85,13 @@ class AutoMaskerStage(Stage):
             cmd.append("--invert_mask")
         if settings.exporttransparent:
             cmd.append("--export_transparent")
-        if paths.dinoconfig.exists():
+        if _is_real_file(paths.dinoconfig):
             cmd += ["--dino_config", paths.dinoconfig]
-        if paths.dinocheckpoint.exists():
+        if _is_real_file(paths.dinocheckpoint):
             cmd += ["--dino_checkpoint", paths.dinocheckpoint]
-        if paths.samconfig.exists():
+        if _is_real_file(paths.samconfig):
             cmd += ["--sam_config", paths.samconfig]
-        if paths.samcheckpoint.exists():
+        if _is_real_file(paths.samcheckpoint):
             cmd += ["--sam_checkpoint", paths.samcheckpoint]
 
         run(cmd)
