@@ -62,42 +62,65 @@ class AutoMaskerStage(Stage):
                 "--config <path-to-default.ini>. (Did the config fail to load?)"
             )
 
+        # AutoMasker writes everything (masked images and/or mask files) into a
+        # single --output directory; there is no separate mask-output flag. Masks
+        # get a suffix (default ".mask"); masked images keep the source name.
         out_dir = ctx.stage_dir("masked")
-        images_out = out_dir / "images"
-        masks_out = out_dir / "masks"
-        images_out.mkdir(exist_ok=True)
-        masks_out.mkdir(exist_ok=True)
 
-        keywords = settings.keywords.replace(".", " ")  # AutoMasker uses spaces
+        # Keywords are passed verbatim. AutoMasker accepts dot- or comma-separated
+        # targets (e.g. "person.sky" or "person,sky").
+        keywords = settings.keywords
 
         cmd = [
             exe,
             "--input", src_dir,
-            "--output", images_out,
-            "--mask_output", masks_out,
-            "--text_prompt", keywords,
-            "--box_threshold", settings.boxthreshold,
-            "--text_threshold", settings.textthreshold,
-            "--mask_expand", settings.maskexpand,
+            "--output", out_dir,
+            "--keywords", keywords,
+            "--box-threshold", settings.boxthreshold,
+            "--text-threshold", settings.textthreshold,
+            "--mask-expand", settings.maskexpand,
         ]
 
+        # Boolean export options (store_true flags).
         if settings.invertmask:
-            cmd.append("--invert_mask")
+            cmd.append("--invert-mask")
         if settings.exporttransparent:
-            cmd.append("--export_transparent")
+            cmd.append("--export-transparent")
+        if settings.exportmaskonly:
+            cmd.append("--export-mask-only")
+        if settings.exportcolored:
+            cmd.append("--export-jpg")
+
+        # Optional custom mask to combine with AI-detected masks.
+        if _is_real_file(settings.custom_mask_path):
+            cmd += ["--custom-mask", settings.custom_mask_path]
+
+        # Model paths (only pass when actually present; AutoMasker falls back to
+        # its bundled Models folder otherwise).
         if _is_real_file(paths.dinoconfig):
-            cmd += ["--dino_config", paths.dinoconfig]
+            cmd += ["--dino-config", paths.dinoconfig]
         if _is_real_file(paths.dinocheckpoint):
-            cmd += ["--dino_checkpoint", paths.dinocheckpoint]
+            cmd += ["--dino-checkpoint", paths.dinocheckpoint]
         if _is_real_file(paths.samconfig):
-            cmd += ["--sam_config", paths.samconfig]
+            cmd += ["--sam-config", paths.samconfig]
         if _is_real_file(paths.samcheckpoint):
-            cmd += ["--sam_checkpoint", paths.samcheckpoint]
+            cmd += ["--sam-checkpoint", paths.samcheckpoint]
 
         run(cmd)
 
-        # Store the images subdirectory so SfM can find it directly
-        ctx.masked_dir = images_out
-        ctx.metadata["masks_dir"] = masks_out
-        logger.info("Masked images → %s", images_out)
+        # Handoff to SfM:
+        #  - "mask-only" output contains mask files, NOT usable images, so leave
+        #    masked_dir unset (SfM keeps using the cubemap images) and expose the
+        #    mask directory via metadata for a future COLMAP mask_path wiring.
+        #  - otherwise the output dir holds masked images that SfM consumes directly.
+        ctx.metadata["mask_dir"] = out_dir
+        if settings.exportmaskonly:
+            logger.warning(
+                "AutoMasker ran in mask-only mode: %s contains mask files, not "
+                "images. SfM will use the unmasked cubemap images (mask_path "
+                "wiring into COLMAP is not yet implemented).", out_dir
+            )
+        else:
+            ctx.masked_dir = out_dir
+            logger.info("Masked images → %s", out_dir)
         return ctx

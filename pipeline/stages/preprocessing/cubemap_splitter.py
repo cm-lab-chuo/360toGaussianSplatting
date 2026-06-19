@@ -58,9 +58,20 @@ class CubemapSplitter(Stage):
 
         # Build the list of (yaw, pitch) view directions
         view_angles = list(self._view_angles())
+        expected = len(frames) * len(view_angles)
+
+        # Idempotent resume: if a previous run already produced the full set of
+        # crops, skip regeneration (this stage is the slow part of the pipeline).
+        existing = len(list(out_dir.glob("*.jpg")))
+        if existing >= expected:
+            logger.info("Found %d existing crops (>= %d expected) — skipping split.",
+                        existing, expected)
+            ctx.cubemap_dir = out_dir
+            return ctx
+
         logger.info(
             "Splitting %d frames × %d views = %d images",
-            len(frames), len(view_angles), len(frames) * len(view_angles),
+            len(frames), len(view_angles), expected,
         )
 
         v = self.cfg.video
