@@ -80,9 +80,10 @@ class MaskSettings:
     # masker ran (e.g. --masker none) or to override the masker's output.
     external_mask_dir: Path = field(default_factory=lambda: Path(""))
     # COLMAP ignores BLACK (0) pixels. Detected/dynamic regions must therefore be
-    # black in the COLMAP mask. Flip this if your source masks use the opposite
-    # polarity (white = ignore).
-    mask_invert: bool = False
+    # black in the COLMAP mask. AutoMasker outputs removed regions as WHITE, so
+    # inversion is needed by default. Flip to False for sources that already use
+    # COLMAP polarity (white = keep).
+    mask_invert: bool = True
     # Comma-separated filename-stem suffixes to try when matching a raw mask to an
     # image (e.g. AutoMasker writes "<stem>.mask.png"). "" (no suffix) is always
     # also tried.

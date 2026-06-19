@@ -78,7 +78,9 @@ class AutoMaskerStage(Stage):
             "--keywords", keywords,
             "--box-threshold", settings.boxthreshold,
             "--text-threshold", settings.textthreshold,
-            "--mask-expand", settings.maskexpand,
+            # AutoMasker requires an integer for --mask-expand (a float like "5.0"
+            # is rejected with exit code 2).
+            "--mask-expand", int(round(settings.maskexpand)),
         ]
 
         # Boolean export options (store_true flags).
@@ -108,10 +110,21 @@ class AutoMaskerStage(Stage):
 
         run(cmd)
 
+        # AutoMasker writes into subfolders of --output, not the top level:
+        #   <out>/mask_only/   binary mask PNGs   (preferred for COLMAP masking)
+        #   <out>/transparent/ RGBA images (mask in alpha)
+        # Point mask_dir at the binary masks if present, falling back sensibly.
+        mask_src = out_dir
+        for cand in ("mask_only", "masks", "transparent"):
+            d = out_dir / cand
+            if d.is_dir() and any(d.glob("*.png")):
+                mask_src = d
+                break
+
         # Handoff to SfM via COLMAP's mask_path mechanism: keep the original
         # (cubemap) images as the image set and expose the mask dir. The SfM stage
         # normalizes these into COLMAP's convention and applies them. We do NOT set
         # masked_dir, so images and masks never get mixed in one folder.
-        ctx.mask_dir = out_dir
-        logger.info("AutoMasker output → %s (masks will be applied in SfM)", out_dir)
+        ctx.mask_dir = mask_src
+        logger.info("AutoMasker output → %s (masks will be applied in SfM)", mask_src)
         return ctx
