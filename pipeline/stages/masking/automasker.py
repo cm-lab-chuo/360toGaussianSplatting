@@ -108,19 +108,10 @@ class AutoMaskerStage(Stage):
 
         run(cmd)
 
-        # Handoff to SfM:
-        #  - "mask-only" output contains mask files, NOT usable images, so leave
-        #    masked_dir unset (SfM keeps using the cubemap images) and expose the
-        #    mask directory via metadata for a future COLMAP mask_path wiring.
-        #  - otherwise the output dir holds masked images that SfM consumes directly.
-        ctx.metadata["mask_dir"] = out_dir
-        if settings.exportmaskonly:
-            logger.warning(
-                "AutoMasker ran in mask-only mode: %s contains mask files, not "
-                "images. SfM will use the unmasked cubemap images (mask_path "
-                "wiring into COLMAP is not yet implemented).", out_dir
-            )
-        else:
-            ctx.masked_dir = out_dir
-            logger.info("Masked images → %s", out_dir)
+        # Handoff to SfM via COLMAP's mask_path mechanism: keep the original
+        # (cubemap) images as the image set and expose the mask dir. The SfM stage
+        # normalizes these into COLMAP's convention and applies them. We do NOT set
+        # masked_dir, so images and masks never get mixed in one folder.
+        ctx.mask_dir = out_dir
+        logger.info("AutoMasker output → %s (masks will be applied in SfM)", out_dir)
         return ctx

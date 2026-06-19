@@ -73,6 +73,25 @@ class AlignmentSettings:
 
 
 @dataclass
+class MaskSettings:
+    # Whether masks (from any source) are fed into the SfM feature extractor.
+    apply_masks_to_sfm: bool = True
+    # Masks produced by a separate/external program. Used when no in-pipeline
+    # masker ran (e.g. --masker none) or to override the masker's output.
+    external_mask_dir: Path = field(default_factory=lambda: Path(""))
+    # COLMAP ignores BLACK (0) pixels. Detected/dynamic regions must therefore be
+    # black in the COLMAP mask. Flip this if your source masks use the opposite
+    # polarity (white = ignore).
+    mask_invert: bool = False
+    # Comma-separated filename-stem suffixes to try when matching a raw mask to an
+    # image (e.g. AutoMasker writes "<stem>.mask.png"). "" (no suffix) is always
+    # also tried.
+    mask_suffixes: str = ".mask,_mask,_masked"
+    # Grayscale threshold for binarizing the raw mask (0-255).
+    mask_threshold: int = 127
+
+
+@dataclass
 class SphereSFMSettings:
     max_num_features: int = 32768
     first_octave: int = 0
@@ -157,6 +176,7 @@ class Config:
     automasker_paths: AutoMaskerPaths = field(default_factory=AutoMaskerPaths)
     video: VideoSettings = field(default_factory=VideoSettings)
     automasker: AutoMaskerSettings = field(default_factory=AutoMaskerSettings)
+    mask: MaskSettings = field(default_factory=MaskSettings)
     alignment: AlignmentSettings = field(default_factory=AlignmentSettings)
     spheresfm: SphereSFMSettings = field(default_factory=SphereSFMSettings)
     postshot: PostShotSettings = field(default_factory=PostShotSettings)
@@ -240,6 +260,13 @@ class Config:
         # ToolPaths
         cfg.tool_paths.ffmpeg = _p("ToolPaths", "ffmpeg")
         cfg.tool_paths.colmap_sphere = _p("ToolPaths", "colmap_sphere")
+
+        # MaskSettings
+        cfg.mask.apply_masks_to_sfm = _b("MaskSettings", "apply_masks_to_sfm", True)
+        cfg.mask.external_mask_dir = _p("MaskSettings", "external_mask_dir")
+        cfg.mask.mask_invert = _b("MaskSettings", "mask_invert", False)
+        cfg.mask.mask_suffixes = _s("MaskSettings", "mask_suffixes", ".mask,_mask,_masked")
+        cfg.mask.mask_threshold = _i("MaskSettings", "mask_threshold", 127)
 
         # COLMAPPaths
         cfg.colmap_paths.colmappath = _p("COLMAPPaths", "colmappath")

@@ -20,6 +20,7 @@ class PipelineContext:
     frames_dir: Optional[Path] = None      # raw equirectangular frames
     cubemap_dir: Optional[Path] = None     # perspective crop images
     masked_dir: Optional[Path] = None      # masked versions of cubemap images
+    mask_dir: Optional[Path] = None        # raw masks (any source) for SfM masking
     sparse_dir: Optional[Path] = None      # COLMAP sparse reconstruction
 
     # ── freeform metadata for stage-to-stage communication ───────────────

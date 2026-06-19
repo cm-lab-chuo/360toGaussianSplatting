@@ -16,6 +16,7 @@ from config import Config
 from pipeline.base import Stage
 from pipeline.context import PipelineContext
 from utils.process import run
+from utils.masks import resolve_colmap_mask_path
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,11 @@ class COLMAPStage(Stage):
         db_path = ctx.work_dir / "database.db"
         s = self.cfg.spheresfm  # reuse same params (compatible subset)
 
+        # Resolve masks from any source (masker stage or external program).
+        mask_path = resolve_colmap_mask_path(ctx, self.cfg)
+
         # Feature extraction
-        run([
+        feat_cmd = [
             self._exe, "feature_extractor",
             "--database_path", db_path,
             "--image_path", images_dir,
@@ -56,7 +60,10 @@ class COLMAPStage(Stage):
             "--SiftExtraction.domain_size_pooling",
                 "1" if s.domain_size_pooling else "0",
             "--ImageReader.camera_model", "PINHOLE",
-        ])
+        ]
+        if mask_path is not None:
+            feat_cmd += ["--ImageReader.mask_path", mask_path]
+        run(feat_cmd)
 
         # Matching
         matcher = "sequential_matcher" if s.matcher_type == "sequential" else "exhaustive_matcher"
