@@ -26,6 +26,7 @@ To replace the projection algorithm:
   Subclass CubemapSplitter, override `reproject()`.
 """
 from __future__ import annotations
+import json
 import logging
 from pathlib import Path
 from typing import Iterable
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 class CubemapSplitter(Stage):
+    _MANIFEST_NAME = ".cubemap-manifest.json"
 
     @property
     def name(self) -> str:
@@ -59,15 +61,22 @@ class CubemapSplitter(Stage):
         # Build the list of (yaw, pitch) view directions
         view_angles = list(self._view_angles())
         expected = len(frames) * len(view_angles)
+        expected_names = self._expected_names(frames, view_angles)
+        manifest = self._build_manifest(frames, expected_names)
+        manifest_path = out_dir / self._MANIFEST_NAME
 
         # Idempotent resume: if a previous run already produced the full set of
         # crops, skip regeneration (this stage is the slow part of the pipeline).
         existing = len(list(out_dir.glob("*.jpg")))
-        if existing >= expected:
+        if self._cache_is_valid(out_dir, manifest_path, manifest, expected_names):
             logger.info("Found %d existing crops (>= %d expected) — skipping split.",
                         existing, expected)
             ctx.cubemap_dir = out_dir
             return ctx
+
+        for stale in out_dir.glob("*.jpg"):
+            stale.unlink()
+        manifest_path.unlink(missing_ok=True)
 
         logger.info(
             "Splitting %d frames × %d views = %d images",
@@ -87,14 +96,94 @@ class CubemapSplitter(Stage):
             for yaw, pitch in view_angles:
                 crop = self.reproject(img, yaw, pitch, v.fovvalue, v.resolutionwidth, v.resolutionheight)
                 out_name = f"{idx:06d}_y{yaw:03d}_p{pitch:+04d}.jpg"
-                cv2.imwrite(str(out_dir / out_name), crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not cv2.imwrite(
+                    str(out_dir / out_name),
+                    crop,
+                    [cv2.IMWRITE_JPEG_QUALITY, 95],
+                ):
+                    raise RuntimeError(
+                        f"Failed to write cubemap crop: {out_dir / out_name}"
+                    )
 
         total = len(list(out_dir.glob("*.jpg")))
+        if total != expected:
+            raise RuntimeError(
+                f"Cubemap generation incomplete: expected {expected} files, got {total}"
+            )
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         logger.info("Generated %d perspective crops → %s", total, out_dir)
         ctx.cubemap_dir = out_dir
         return ctx
 
     # ── view angle generator ──────────────────────────────────────────────
+
+    def _expected_names(
+        self,
+        frames: list[Path],
+        view_angles: list[tuple[int, int]],
+    ) -> list[str]:
+        names = []
+        for seq, frame_path in enumerate(frames):
+            idx = int(frame_path.stem) if frame_path.stem.isdigit() else seq
+            names.extend(
+                f"{idx:06d}_y{yaw:03d}_p{pitch:+04d}.jpg"
+                for yaw, pitch in view_angles
+            )
+        if len(names) != len(set(names)):
+            raise RuntimeError(
+                "Input frame names produce duplicate cubemap output names. "
+                "Rename duplicate numeric stems before running the splitter."
+            )
+        return names
+
+    def _build_manifest(
+        self,
+        frames: list[Path],
+        expected_names: list[str],
+    ) -> dict:
+        v = self.cfg.video
+        return {
+            "version": 1,
+            "inputs": [
+                {
+                    "name": frame.name,
+                    "size": frame.stat().st_size,
+                    "mtime_ns": frame.stat().st_mtime_ns,
+                }
+                for frame in frames
+            ],
+            "settings": {
+                "splits": v.splits,
+                "fovvalue": v.fovvalue,
+                "resolutionwidth": v.resolutionwidth,
+                "resolutionheight": v.resolutionheight,
+                "usemultitilt": v.usemultitilt,
+                "tiltangle2": v.tiltangle2,
+                "tiltangle3": v.tiltangle3,
+            },
+            "outputs": expected_names,
+        }
+
+    @staticmethod
+    def _cache_is_valid(
+        out_dir: Path,
+        manifest_path: Path,
+        manifest: dict,
+        expected_names: list[str],
+    ) -> bool:
+        if not manifest_path.is_file():
+            return False
+        try:
+            cached = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if cached != manifest:
+            return False
+        existing_names = {path.name for path in out_dir.glob("*.jpg")}
+        return existing_names == set(expected_names)
 
     def _view_angles(self) -> Iterable[tuple[int, int]]:
         v = self.cfg.video

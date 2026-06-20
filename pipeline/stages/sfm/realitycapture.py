@@ -1,24 +1,6 @@
-"""
-Stage 5c — RealityCapture / RealityScan alignment.
-
-Calls RealityScan.exe (Epic Games) for camera registration.
-After alignment, exports camera parameters in COLMAP-compatible format
-so downstream 3DGS trainers can consume the result directly.
-
-RealityCapture CLI reference:
-  https://support.capturingreality.com/hc/en-us/articles/360017527431
-
-Workflow:
-  1. Create RC project from images
-  2. Align cameras
-  3. Export cameras as COLMAP format (via RC_Settings XMLs)
-  4. Convert RC output → COLMAP sparse (cameras.bin, images.bin, points3D.bin)
-
-Note: Step 3 uses RC export presets from the configured RC_Settings folder
-([PostShotPaths] settingsfolder): 3DGS_reg.xml (camera params) and
-3DGS_ply.xml (sparse point cloud as PLY).
-"""
+"""RealityCapture / RealityScan camera alignment stage."""
 from __future__ import annotations
+
 import logging
 from pathlib import Path
 
@@ -47,8 +29,6 @@ class RealityCaptureStage(Stage):
             )
 
         images_dir = ctx.images_for_sfm()
-        assert images_dir is not None
-
         sparse_dir = ctx.stage_dir("sparse")
         rc_project = ctx.work_dir / "rc_project.rcproj"
         export_dir = ctx.work_dir / "rc_export"
@@ -57,55 +37,37 @@ class RealityCaptureStage(Stage):
         reg_xml = settings_folder / "3DGS_reg.xml" if settings_folder.exists() else None
         ply_xml = settings_folder / "3DGS_ply.xml" if settings_folder.exists() else None
 
-        # Build the RealityCapture command chain
-        cmd = [rc_exe]
-
-        # Add images
-        cmd += ["-addFolder", images_dir]
-
-        # Align cameras
-        cmd += ["-align"]
-
-        # Export camera registration
+        cmd = [rc_exe, "-addFolder", images_dir, "-align"]
         if reg_xml and reg_xml.exists():
             cmd += ["-exportRegistration", export_dir / "cameras", reg_xml]
-
-        # Export sparse point cloud as PLY
         if ply_xml and ply_xml.exists():
             cmd += ["-exportModel", "sparse_cloud", export_dir / "sparse.ply", ply_xml]
-
-        # Save and quit
         cmd += ["-save", rc_project, "-quit"]
 
         run(cmd)
 
-        # The export gives us RC-format camera params; convert to COLMAP format
         self._convert_to_colmap(export_dir, sparse_dir, images_dir)
+        self._validate_colmap_model(sparse_dir / "0")
 
         ctx.sparse_dir = sparse_dir
-        logger.info("RealityCapture alignment complete → %s", sparse_dir)
+        logger.info("RealityCapture alignment complete -> %s", sparse_dir)
         return ctx
 
     def _convert_to_colmap(
         self, export_dir: Path, sparse_dir: Path, images_dir: Path
     ) -> None:
-        """
-        Convert RealityCapture export → COLMAP sparse format.
-
-        RealityCapture exports in its own XML/CSV format.  This conversion
-        must be implemented once RC export format is confirmed.
-
-        For now, the raw RC export is preserved so you can inspect it and
-        implement the conversion appropriate for your RC version.
-        """
-        sparse_dir.mkdir(parents=True, exist_ok=True)
-        model_dir = sparse_dir / "0"
-        model_dir.mkdir(exist_ok=True)
-
-        logger.warning(
-            "RealityCapture → COLMAP conversion not yet implemented.\n"
-            "Raw RC export is at: %s\n"
-            "Implement _convert_to_colmap() or use an external converter "
-            "(e.g. rc2colmap, or pycolmap to write cameras.bin/images.bin).",
-            export_dir,
+        """Convert the RealityCapture export to a COLMAP sparse model."""
+        raise NotImplementedError(
+            "RealityCapture to COLMAP conversion is not implemented. "
+            f"Raw RealityCapture output is preserved at {export_dir}. "
+            "Implement _convert_to_colmap() before using --sfm realitycapture."
         )
+
+    @staticmethod
+    def _validate_colmap_model(model_dir: Path) -> None:
+        required = ("cameras.bin", "images.bin", "points3D.bin")
+        missing = [name for name in required if not (model_dir / name).is_file()]
+        if missing:
+            raise RuntimeError(
+                f"Incomplete COLMAP model in {model_dir}: missing {missing}"
+            )

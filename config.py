@@ -265,7 +265,9 @@ class Config:
         # MaskSettings
         cfg.mask.apply_masks_to_sfm = _b("MaskSettings", "apply_masks_to_sfm", True)
         cfg.mask.external_mask_dir = _p("MaskSettings", "external_mask_dir")
-        cfg.mask.mask_invert = _b("MaskSettings", "mask_invert", False)
+        cfg.mask.mask_invert = _b(
+            "MaskSettings", "mask_invert", cfg.mask.mask_invert
+        )
         cfg.mask.mask_suffixes = _s("MaskSettings", "mask_suffixes", ".mask,_mask,_masked")
         cfg.mask.mask_threshold = _i("MaskSettings", "mask_threshold", 127)
 

@@ -26,6 +26,7 @@ PATH); it can also be passed explicitly via exe_path.
 from __future__ import annotations
 import logging
 import os
+import shutil
 from pathlib import Path
 
 from config import Config
@@ -60,12 +61,15 @@ class SphereSFMStage(Stage):
         return "SphereSFM"
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
-        if not self._exe.exists():
+        resolved = shutil.which(str(self._exe))
+        if resolved is None:
             raise FileNotFoundError(
                 f"colmap_sphere.exe not found at {self._exe}\n"
                 "Set [ToolPaths] colmap_sphere in your config, add it to PATH, "
                 "or pass exe_path= to SphereSFMStage."
             )
+        self._exe = Path(resolved)
+        self._env = self._build_env()
 
         images_dir = ctx.images_for_sfm()
         assert images_dir is not None and images_dir.exists()

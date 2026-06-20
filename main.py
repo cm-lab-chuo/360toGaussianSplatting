@@ -73,6 +73,50 @@ def _setup_logging(verbose: bool) -> None:
 
 STAGE_ORDER = ["extraction", "filter", "cubemap", "masking", "sfm"]
 
+
+def _require_existing_dir(path: Path, stage: str) -> Path:
+    if str(path) in ("", ".") or not path.is_dir() or not any(path.iterdir()):
+        raise RuntimeError(
+            f"Cannot skip {stage!r}: no existing output found in {path}. "
+            f"Run the {stage} stage first or remove it from --skip."
+        )
+    return path
+
+
+def restore_skipped_outputs(
+    ctx: PipelineContext,
+    skip: set[str],
+    masker: str,
+    cfg: Config,
+) -> PipelineContext:
+    """Restore context fields for skipped stages from the working directory."""
+    if "extraction" in skip:
+        ctx.frames_dir = _require_existing_dir(ctx.work_dir / "frames", "extraction")
+
+    if "cubemap" in skip:
+        ctx.cubemap_dir = _require_existing_dir(ctx.work_dir / "cubemap", "cubemap")
+
+    if "masking" in skip and masker == "pregenerated":
+        ctx.mask_dir = _require_existing_dir(
+            cfg.automasker.pregenerated_masks_path,
+            "masking",
+        )
+    elif "masking" in skip and masker != "none":
+        masked_root = _require_existing_dir(ctx.work_dir / "masked", "masking")
+        for name in ("mask_only", "masks", "transparent"):
+            candidate = masked_root / name
+            if candidate.is_dir() and any(candidate.iterdir()):
+                ctx.mask_dir = candidate
+                break
+        else:
+            ctx.mask_dir = masked_root
+
+    if "sfm" in skip:
+        ctx.sparse_dir = _require_existing_dir(ctx.work_dir / "sparse", "sfm")
+
+    return ctx
+
+
 def build_pipeline(
     cfg: Config,
     masker: str,
@@ -224,13 +268,19 @@ def main(argv=None) -> int:
 
     # Parse --skip
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
-
-    # Build pipeline
-    pipeline = build_pipeline(cfg, args.masker, args.sfm, skip, args.stop_after)
+    unknown_skip = skip - set(STAGE_ORDER)
+    if unknown_skip:
+        raise ValueError(
+            f"Unknown stage(s) in --skip: {', '.join(sorted(unknown_skip))}"
+        )
 
     # Build context
     args.output.mkdir(parents=True, exist_ok=True)
     ctx = PipelineContext(input_path=args.input, work_dir=args.output)
+    restore_skipped_outputs(ctx, skip, args.masker, cfg)
+
+    # Build pipeline
+    pipeline = build_pipeline(cfg, args.masker, args.sfm, skip, args.stop_after)
 
     # Run
     logger.info("Input:  %s", args.input)

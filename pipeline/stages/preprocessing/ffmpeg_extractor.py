@@ -6,7 +6,7 @@ Output frames are placed in ctx.frames_dir as JPEG files.
 
 Configurable parameters (VideoSettings):
   fps                  — frames per second to extract
-  frame_extraction_mode — "seconds" uses fps as interval; "frames" keeps every Nth frame
+  frame_extraction_mode — "seconds" uses fps as a rate; "frames" keeps every Nth frame
   resolutionwidth/height — output frame resolution
 """
 from __future__ import annotations
@@ -93,11 +93,18 @@ class FFmpegExtractor(Stage):
 
         # Frame rate selection
         if v.frame_extraction_mode == "seconds":
+            if v.fps <= 0:
+                raise ValueError("VideoSettings.fps must be greater than zero")
             vf_parts.append(f"fps={v.fps}")
-        else:
-            # Every Nth frame (fps here is treated as 1/N)
-            every_n = max(1, round(1.0 / v.fps))
+        elif v.frame_extraction_mode == "frames":
+            # In frames mode the legacy `fps` field is the frame interval:
+            # fps=5 keeps frames 0, 5, 10, ...
+            every_n = max(1, round(v.fps))
             vf_parts.append(f"select='not(mod(n\\,{every_n}))',setpts=N/FRAME_RATE/TB")
+        else:
+            raise ValueError(
+                "VideoSettings.frame_extraction_mode must be 'seconds' or 'frames'"
+            )
 
         # Resolution scaling (preserve aspect ratio, pad to target if needed)
         vf_parts.append(

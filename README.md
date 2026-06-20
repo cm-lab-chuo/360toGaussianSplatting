@@ -30,9 +30,9 @@
 
 | 種類 | 内容 | 入手 |
 |---|---|---|
-| **Python** | 3.10 以上（3.12 で動作確認済み） | システムに既存 |
+| **Python** | 3.10 以上（3.12 で動作確認済み） | Python公式サイト等からインストール |
 | **Pythonライブラリ** | opencv-python, numpy, Pillow, tqdm | `pip install`（下記） |
-| **外部ツール** | 使うStageに応じて（COLMAP / AutoMasker / RealityScan / FFmpeg / colmap_sphere） | 各自で用意。`config/default.ini` にパス記入 |
+| **外部ツール** | 使うStageに応じて（COLMAP / AutoMasker / RealityScan / FFmpeg / colmap_sphere） | 各自で用意。`config/local.ini` にパス記入 |
 
 外部ツールは Python 環境とは**別物**。pip では入らない。使う手法のものだけ用意すればよい。
 
@@ -46,22 +46,65 @@
 
 ---
 
-## 3. セットアップ（最初の一回だけ）
+## 3. まっさらなWindows環境からのセットアップ
 
-PowerShell で:
+以下は、Pythonや外部ツールがまだ入っていないWindows環境を想定した手順。
+
+### 3.1 PythonとGitをインストール
+
+次のソフトウェアをインストールする。
+
+- **Python 3.12（64-bit推奨）**
+- **Git for Windows**（ZIPでプロジェクトを受け取る場合は省略可）
+
+Pythonのインストーラーでは、可能なら **Add Python to PATH** を有効にする。
+インストール後、新しいPowerShellを開いて確認する。
 
 ```powershell
-cd <プロジェクトフォルダ>
+python --version
+git --version
+```
 
-# 仮想環境を作成（.venv フォルダができる）
+`python` が見つからない場合は、Windowsの「アプリ実行エイリアス」を確認するか、
+PythonをPATH付きで再インストールする。
+
+### 3.2 プロジェクトを取得
+
+Gitを使う場合:
+
+```powershell
+git clone <このリポジトリのURL>
+cd 360toGaussianSplatting
+```
+
+ZIPで取得した場合は展開し、PowerShellでそのフォルダへ移動する。
+
+```powershell
+cd C:\path\to\360toGaussianSplatting
+```
+
+### 3.3 Python仮想環境を作成
+
+```powershell
+# 仮想環境を作成
 python -m venv .venv
 
-# 有効化（プロンプト先頭に (.venv) が付く）
+# 仮想環境を有効化
 .\.venv\Scripts\Activate.ps1
 
-# 依存ライブラリをインストール
-pip install -r requirements.txt
+# pipを更新して依存ライブラリをインストール
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
+
+インストール確認:
+
+```powershell
+python -c "import cv2, numpy, PIL, tqdm; print('Python dependencies: OK')"
+python -m unittest discover -v
+```
+
+テストがすべて `OK` になればPython側の準備は完了。
 
 > **`Activate.ps1` が「スクリプトの実行が無効」で弾かれた場合**
 > 一度だけ以下を実行して許可する:
@@ -73,6 +116,109 @@ pip install -r requirements.txt
 > .\.venv\Scripts\python.exe main.py ...
 > ```
 
+### 3.4 外部ツールを用意
+
+Pythonライブラリだけではパイプラインは完走しない。使用する処理に応じて
+外部ツールを別途インストールする。
+
+#### 最小動作確認（Cubemap生成まで）
+
+必要なのは **FFmpeg** のみ。FFmpegをインストールし、次を確認する。
+
+```powershell
+ffmpeg -version
+```
+
+PATHへ追加しない場合は、後述の設定ファイルで `ffmpeg.exe` のフルパスを指定する。
+
+#### COLMAP sparse生成まで行う推奨構成
+
+最初は次の構成が比較的シンプル。
+
+- FFmpeg
+- 標準COLMAP
+- マスキングなし（`--masker none`）
+
+COLMAPをインストールし、PATHを設定した場合は次を確認する。
+
+```powershell
+colmap -h
+```
+
+PATHを使わない場合は、設定ファイルの
+`[COLMAPPaths] colmappath` に実行ファイルのフルパスを記入する。
+
+#### その他の構成
+
+- `--sfm spheresfm` には別途 `colmap_sphere.exe` が必要。
+- `--masker automasker` にはAutoMasker本体とモデルファイルが必要。
+- AutoMaskerのGPU実行には、配布物が要求するNVIDIAドライバーやCUDA環境も必要。
+- `--sfm realitycapture` はCOLMAP形式への変換が未実装のため、現在は完走しない。
+
+つまり、外部ツールをまだ用意していない状態でデフォルトの
+`python main.py ...` を実行すると、SphereSFMまたはAutoMaskerが見つからず停止する。
+
+### 3.5 ローカル設定ファイルを作成
+
+共有設定を直接書き換えず、ローカル用設定をコピーして使う。
+`config/local.ini` はGit管理対象外。
+
+```powershell
+Copy-Item config\default.ini config\local.ini
+notepad config\local.ini
+```
+
+標準COLMAPを使う最小構成では、少なくとも次を実環境に合わせる。
+PATHから見つかるツールは空欄のままでよい。
+
+```ini
+[ToolPaths]
+ffmpeg =
+
+[COLMAPPaths]
+colmappath =
+```
+
+PATHを使用しない例:
+
+```ini
+[ToolPaths]
+ffmpeg = C:\Tools\ffmpeg\bin\ffmpeg.exe
+
+[COLMAPPaths]
+colmappath = C:\Tools\COLMAP\COLMAP.exe
+```
+
+### 3.6 段階的に動作確認
+
+まずSfMやマスキングを動かさず、フレーム抽出とCubemap生成だけ確認する。
+
+```powershell
+python main.py C:\data\room.mp4 output\smoke `
+  --config config\local.ini `
+  --masker none `
+  --stop-after cubemap
+```
+
+`output\smoke\frames` と `output\smoke\cubemap` に画像が生成されれば成功。
+
+次に標準COLMAPで最後まで実行する。
+
+```powershell
+python main.py C:\data\room.mp4 output\room `
+  --config config\local.ini `
+  --masker none `
+  --sfm colmap
+```
+
+最終的に次の3ファイルが生成されることを確認する。
+
+```text
+output\room\sparse\0\cameras.bin
+output\room\sparse\0\images.bin
+output\room\sparse\0\points3D.bin
+```
+
 ### 仮想環境について（よくある疑問）
 
 - `python main.py ...` は**仮想環境を自動で立ち上げない**。実行時にPATHが通っているPythonを使うだけ。
@@ -82,18 +228,19 @@ pip install -r requirements.txt
 
 ---
 
-## 4. 設定ファイル `config/default.ini`
+## 4. 設定ファイル
 
-全パラメータはここに集約。標準的な INI 形式。
+全パラメータは標準的なINI形式で管理する。`config/default.ini` はひな形として残し、
+通常はコピーした `config/local.ini` を `--config` で指定する。
 
-**最初にやること**: 使う外部ツールのパスを実環境に合わせて書き換える。
+**最初にやること**: `config/local.ini` 内の外部ツールのパスを実環境に合わせる。
 
 ```ini
 [COLMAPPaths]
 colmappath = C:\path\to\colmap.exe        ; --sfm colmap を使うなら
 
 [AutoMaskerPaths]
-automaskerpath = F:\...\AutoMasker.exe     ; --masker automasker を使うなら
+automaskerpath = C:\path\to\AutoMasker.exe ; --masker automasker を使うなら
 
 [VideoSettings]
 fps = 1                ; 1秒に1フレーム抽出
@@ -142,6 +289,10 @@ python main.py C:\data\room.mp4 output\room --masker none --sfm colmap
 | `-v` | 詳細ログ | |
 
 ステップ名: `extraction` / `filter` / `cubemap` / `masking` / `sfm`
+
+`--skip` で再開する場合、対応する出力フォルダ（例: `frames/`、
+`cubemap/`）が既に存在する必要があります。見つからない場合は処理開始前に
+エラーになります。
 
 ### 実践例
 
