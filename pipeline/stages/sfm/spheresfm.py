@@ -25,6 +25,7 @@ PATH); it can also be passed explicitly via exe_path.
 """
 from __future__ import annotations
 import logging
+import os
 from pathlib import Path
 
 from config import Config
@@ -37,17 +38,22 @@ logger = logging.getLogger(__name__)
 
 
 class SphereSFMStage(Stage):
-    # NOTE: verify --realign_cubemaps / --cubemap_refine_focal and the exact
-    # sub-command names against `colmap_sphere.exe -h` (and per-command help)
-    # before relying on the output.
 
     def __init__(self, cfg: Config, exe_path: Path | None = None) -> None:
         super().__init__(cfg)
-        # An unset config value normalizes to Path("") == Path("."), so treat
-        # "" and "." as "not configured" and fall back to PATH resolution.
         configured = cfg.tool_paths.colmap_sphere
         is_set = str(configured) not in ("", ".")
         self._exe = exe_path or (configured if is_set else Path("colmap_sphere.exe"))
+        self._env = self._build_env()
+
+    def _build_env(self) -> dict | None:
+        """Add the exe's directory to PATH so Windows can find sibling DLLs."""
+        exe_dir = Path(self._exe).resolve().parent
+        if not exe_dir.is_dir():
+            return None
+        env = os.environ.copy()
+        env["PATH"] = str(exe_dir) + os.pathsep + env.get("PATH", "")
+        return env
 
     @property
     def name(self) -> str:
@@ -113,7 +119,7 @@ class SphereSFMStage(Stage):
             cmd += ["--ImageReader.mask_path", mask_path]
         if s.realign_cubemaps:
             cmd += ["--realign_cubemaps", "1"]
-        run(cmd)
+        run(cmd, env=self._env)
 
     def _run_matcher(self, db: Path, s) -> None:
         matcher_cmd = (
@@ -127,7 +133,7 @@ class SphereSFMStage(Stage):
             "--SiftMatching.max_num_matches", s.max_num_matches,
             "--SiftMatching.guided_matching", "1" if s.guided_matching else "0",
         ]
-        run(cmd)
+        run(cmd, env=self._env)
 
     def _run_mapper(self, images_dir: Path, db: Path, sparse_dir: Path, s) -> None:
         cmd = [
@@ -144,7 +150,7 @@ class SphereSFMStage(Stage):
         ]
         if s.cubemap_refine_focal:
             cmd += ["--cubemap_refine_focal", "1"]
-        run(cmd)
+        run(cmd, env=self._env)
 
     def _run_bundle_adjuster(self, model_dir: Path, s) -> None:
         cmd = [
@@ -153,4 +159,4 @@ class SphereSFMStage(Stage):
             "--output_path", model_dir,
             "--BundleAdjustment.max_num_iterations", s.ba_global_max_iterations,
         ]
-        run(cmd)
+        run(cmd, env=self._env)

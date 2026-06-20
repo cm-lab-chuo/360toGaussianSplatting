@@ -10,6 +10,7 @@ Output: same COLMAP sparse format as SphereSFM (ctx.sparse_dir/0/).
 """
 from __future__ import annotations
 import logging
+import os
 from pathlib import Path
 
 from config import Config
@@ -25,11 +26,18 @@ class COLMAPStage(Stage):
 
     def __init__(self, cfg: Config) -> None:
         super().__init__(cfg)
-        # An unset config value normalizes to Path("") == Path("."); treat "" and
-        # "." as "not configured" and fall back to PATH resolution.
         colmap_path = cfg.colmap_paths.colmappath
         is_set = str(colmap_path) not in ("", ".")
         self._exe = colmap_path if is_set else Path("colmap")
+        self._env = self._build_env()
+
+    def _build_env(self) -> dict | None:
+        exe_dir = Path(self._exe).resolve().parent
+        if not exe_dir.is_dir():
+            return None
+        env = os.environ.copy()
+        env["PATH"] = str(exe_dir) + os.pathsep + env.get("PATH", "")
+        return env
 
     @property
     def name(self) -> str:
@@ -63,7 +71,7 @@ class COLMAPStage(Stage):
         ]
         if mask_path is not None:
             feat_cmd += ["--ImageReader.mask_path", mask_path]
-        run(feat_cmd)
+        run(feat_cmd, env=self._env)
 
         # Matching
         matcher = "sequential_matcher" if s.matcher_type == "sequential" else "exhaustive_matcher"
@@ -72,7 +80,7 @@ class COLMAPStage(Stage):
             "--database_path", db_path,
             "--SiftMatching.max_num_matches", s.max_num_matches,
             "--SiftMatching.guided_matching", "1" if s.guided_matching else "0",
-        ])
+        ], env=self._env)
 
         # Mapping
         model_dir = sparse_dir / "0"
@@ -87,7 +95,7 @@ class COLMAPStage(Stage):
             "--Mapper.filter_max_reproj_error", s.filter_max_reproj_error,
             "--Mapper.filter_min_tri_angle", s.filter_min_tri_angle,
             "--Mapper.abs_pose_min_num_inliers", s.abs_pose_min_num_inliers,
-        ])
+        ], env=self._env)
 
         ctx.sparse_dir = sparse_dir
         logger.info("COLMAP complete → %s", sparse_dir)
