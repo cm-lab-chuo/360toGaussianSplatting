@@ -9,6 +9,12 @@ reconstruct with either the global or the incremental mapper.
 IMPORTANT: input is ctx.frames_dir (ERP), NOT the cubemap/ crops — feeding
 pre-split crops would drop the rig relation the method depends on.
 
+LIMITATION (Issue #8): masks are NOT supported yet. panorama_sfm renders its
+own virtual views and runs feature extraction internally, so there is no hook
+to pass --ImageReader.mask_path (masks would have to be reprojected to the
+virtual views with the same parameters first). If masks are available they are
+ignored, and run() emits an explicit WARNING so the omission is visible.
+
 Route selection (checked at run time, in order):
   1. Local COLMAP has a `panorama_sfm` subcommand (COLMAP >= 4.1) → call it.
   2. [PanoramaSFMSettings] panorama_script points to the pycolmap example
@@ -127,6 +133,7 @@ class PanoramaSFMStage(Stage):
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
         s = self.cfg.panorama_sfm
+        self._warn_if_masks_ignored(ctx)
         images_dir = self._resolve_input(ctx)
         sparse_dir = ctx.stage_dir("sparse")
         pano_dir = ctx.work_dir / "panorama"
@@ -154,6 +161,36 @@ class PanoramaSFMStage(Stage):
         ctx.sparse_dir = sparse_dir
         logger.info("PanoramaSFM (%s) complete → %s", self.mapper, sparse_dir)
         return ctx
+
+    def _warn_if_masks_ignored(self, ctx: PipelineContext) -> None:
+        """
+        panorama_sfm has no hook for --ImageReader.mask_path (Issue #8): it
+        renders virtual views and extracts features internally. If masks are
+        available and would normally be applied to SfM, say so loudly instead
+        of silently reconstructing without them.
+        """
+        ms = self.cfg.mask
+        if not ms.apply_masks_to_sfm:
+            return
+
+        def _usable(d) -> bool:
+            return (bool(d) and str(d) not in ("", ".")
+                    and Path(d).exists() and any(Path(d).iterdir()))
+
+        source = None
+        if _usable(ms.external_mask_dir):
+            source = f"[MaskSettings] external_mask_dir = {ms.external_mask_dir}"
+        elif _usable(ctx.mask_dir):
+            source = f"masker stage output ({ctx.mask_dir})"
+        if source:
+            logger.warning(
+                "Masks are available (%s) but panorama_sfm does NOT support "
+                "masking yet — reconstruction will run WITHOUT masks. Dynamic "
+                "objects may leak into the model. Use --sfm spheresfm/colmap "
+                "if masked SfM is required, or skip the masker "
+                "(--masker none --skip cubemap) to save compute.",
+                source,
+            )
 
     def _resolve_input(self, ctx: PipelineContext) -> Path:
         d = ctx.frames_dir

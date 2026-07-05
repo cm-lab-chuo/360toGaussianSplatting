@@ -134,6 +134,23 @@ def build_pipeline(
     from pipeline.stages.preprocessing.frame_filter import FrameFilter
     from pipeline.stages.preprocessing.cubemap_splitter import CubemapSplitter
 
+    # panorama_sfm consumes the RAW ERP frames directly (Issue #8): the cubemap
+    # crops are never read, and masks cannot be passed to its internal feature
+    # extraction. Warn about stages whose output would be computed then unused.
+    if sfm.startswith("panorama"):
+        log = logging.getLogger(__name__)
+        wasted = [k for k in ("cubemap", "masking") if k not in skip]
+        if masker == "none" and "masking" in wasted:
+            wasted.remove("masking")  # passthrough masker costs nothing
+        if wasted:
+            log.warning(
+                "--sfm %s uses the raw ERP frames directly; the output of the "
+                "%s stage(s) will NOT be used by SfM. Consider --skip %s"
+                "%s to save compute.",
+                sfm, "/".join(wasted), ",".join(wasted),
+                " --masker none" if "masking" in wasted else "",
+            )
+
     all_stages = [
         ("extraction", FFmpegExtractor(cfg)),
         ("filter",     FrameFilter(cfg)),
