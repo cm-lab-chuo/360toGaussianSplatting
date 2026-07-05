@@ -16,8 +16,11 @@ from pipeline.stages.masking.automasker import AutoMaskerStage
 from pipeline.stages.masking.passthrough import PassthroughMasker
 from pipeline.stages.masking.pregenerated import PregeneratedMasker
 
+from functools import partial
+
 from pipeline.stages.sfm.spheresfm import SphereSFMStage
 from pipeline.stages.sfm.colmap import COLMAPStage
+from pipeline.stages.sfm.colmap_panorama import PanoramaSFMStage
 from pipeline.stages.sfm.realitycapture import RealityCaptureStage
 
 
@@ -49,6 +52,9 @@ MASKING: dict = {
 SFM: dict = {
     "spheresfm":      SphereSFMStage,      # 360°-aware COLMAP variant for spherical input
     "colmap":         COLMAPStage,         # standard COLMAP
+    # COLMAP 4.1 panorama_sfm: ERP frames → virtual rig views → global/incremental mapper
+    "panorama_global":      partial(PanoramaSFMStage, mapper="global"),
+    "panorama_incremental": partial(PanoramaSFMStage, mapper="incremental"),
     "realitycapture": RealityCaptureStage, # Epic RealityScan
     # "hloc":         HLocStage,           # future: hierarchical localization
     # "instant_splat": InstantSplatStage,  # future: feed-forward SfM

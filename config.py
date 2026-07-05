@@ -115,6 +115,25 @@ class SphereSFMSettings:
 
 
 @dataclass
+class PanoramaSFMSettings:
+    # COLMAP 4.1 panorama_sfm — render virtual perspective views from ERP
+    # frames (rig relation preserved) and map with global or incremental SfM.
+    # See docs/360sfm_implementation_plan.md Phase 2.
+    mapper: str = "global"                  # "global" | "incremental" (registry name overrides this)
+    run_view_graph_calibrator: bool = True  # calibrate focal priors before global_mapper
+    camera_model: str = "OPENCV"            # camera model of the rendered virtual views
+    num_virtual_views: int = 8              # perspective views rendered per ERP frame
+    virtual_view_fov: float = 90.0          # FOV of each virtual view (degrees)
+    use_gpu: bool = True
+    keep_intermediate: bool = True          # keep rendered virtual views after mapping
+    # Fallback route when the local COLMAP has no `panorama_sfm` subcommand:
+    # path to the pycolmap example script (colmap/python/examples/panorama_sfm.py).
+    panorama_script: Path = field(default_factory=lambda: Path(""))
+    python_exe: Path = field(default_factory=lambda: Path(""))  # interpreter for the script route ("" = current)
+    panorama_script_extra_args: str = ""    # extra CLI args appended to the script call
+
+
+@dataclass
 class ToolPaths:
     # External executables. Leave blank to resolve from PATH.
     ffmpeg: Path = field(default_factory=lambda: Path(""))
@@ -180,6 +199,7 @@ class Config:
     mask: MaskSettings = field(default_factory=MaskSettings)
     alignment: AlignmentSettings = field(default_factory=AlignmentSettings)
     spheresfm: SphereSFMSettings = field(default_factory=SphereSFMSettings)
+    panorama_sfm: PanoramaSFMSettings = field(default_factory=PanoramaSFMSettings)
     postshot: PostShotSettings = field(default_factory=PostShotSettings)
     brush: BrushSettings = field(default_factory=BrushSettings)
     lichtfeld: LichtfeldSettings = field(default_factory=LichtfeldSettings)
@@ -306,6 +326,18 @@ class Config:
         cfg.spheresfm.run_bundle_adjuster = _b("SphereSFMSettings", "run_bundle_adjuster", True)
         cfg.spheresfm.realign_cubemaps = _b("SphereSFMSettings", "realign_cubemaps", True)
         cfg.spheresfm.cubemap_refine_focal = _b("SphereSFMSettings", "cubemap_refine_focal", False)
+
+        # PanoramaSFMSettings
+        cfg.panorama_sfm.mapper = _s("PanoramaSFMSettings", "mapper", "global")
+        cfg.panorama_sfm.run_view_graph_calibrator = _b("PanoramaSFMSettings", "run_view_graph_calibrator", True)
+        cfg.panorama_sfm.camera_model = _s("PanoramaSFMSettings", "camera_model", "OPENCV")
+        cfg.panorama_sfm.num_virtual_views = _i("PanoramaSFMSettings", "num_virtual_views", 8)
+        cfg.panorama_sfm.virtual_view_fov = _f("PanoramaSFMSettings", "virtual_view_fov", 90.0)
+        cfg.panorama_sfm.use_gpu = _b("PanoramaSFMSettings", "use_gpu", True)
+        cfg.panorama_sfm.keep_intermediate = _b("PanoramaSFMSettings", "keep_intermediate", True)
+        cfg.panorama_sfm.panorama_script = _p("PanoramaSFMSettings", "panorama_script")
+        cfg.panorama_sfm.python_exe = _p("PanoramaSFMSettings", "python_exe")
+        cfg.panorama_sfm.panorama_script_extra_args = _s("PanoramaSFMSettings", "panorama_script_extra_args", "")
 
         # PostShotSettings
         cfg.postshot.profile = _s("PostShotSettings", "profile", "Splat MCMC")

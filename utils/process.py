@@ -55,3 +55,32 @@ def run(
         raise subprocess.CalledProcessError(proc.returncode, cmd_strs)
 
     return proc.returncode
+
+
+def run_capture(
+    cmd: list,
+    cwd: Optional[Path] = None,
+    env: Optional[dict] = None,
+) -> tuple[int, str]:
+    """
+    Run a command and return (exit_code, combined stdout+stderr).
+
+    Unlike run(), output is captured instead of streamed, non-zero exit does
+    NOT raise, and a missing executable returns (127, "") instead of raising —
+    intended for capability probes (e.g. `colmap help`).
+    """
+    cmd_strs = [str(c) for c in cmd]
+    logger.debug("$ %s", " ".join(cmd_strs))
+    try:
+        proc = subprocess.run(
+            cmd_strs,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (FileNotFoundError, OSError):
+        return 127, ""
+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")

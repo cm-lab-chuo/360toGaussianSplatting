@@ -21,7 +21,8 @@ Usage examples:
   # Override a config parameter on the command line
   python main.py video.mp4 output/ --set VideoSettings.splits=12
 
-Available SfM methods:    spheresfm (default), colmap, realitycapture
+Available SfM methods:    spheresfm (default), colmap, panorama_global,
+                          panorama_incremental, realitycapture
 Available maskers:        automasker (default), none, pregenerated
 
 Output layout:
@@ -171,6 +172,7 @@ def _apply_overrides(cfg: Config, overrides: list[str]) -> None:
             "AutoMaskerPaths": cfg.automasker_paths,
             "AlignmentSettings": cfg.alignment,
             "SphereSFMSettings": cfg.spheresfm,
+            "PanoramaSFMSettings": cfg.panorama_sfm,
             "PostShotSettings": cfg.postshot,
             "BrushSettings": cfg.brush,
             "LichtfeldSettings": cfg.lichtfeld,
