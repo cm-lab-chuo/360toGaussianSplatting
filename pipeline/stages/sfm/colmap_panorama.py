@@ -66,7 +66,16 @@ class PanoramaSFMStage(Stage):
         self._help_text: str | None = None  # cached `colmap help` output
 
     def _build_env(self) -> dict | None:
-        exe_dir = Path(self._exe).resolve().parent
+        """Prepend the exe's directory to PATH so sibling DLLs are found.
+
+        Skipped for bare command names (exe to be resolved via PATH):
+        resolving a bare name is relative to the CWD, which would wrongly
+        prepend the current working directory to PATH (issue #10).
+        """
+        exe = Path(self._exe)
+        if exe.parent == Path("."):  # bare name — no directory component
+            return None
+        exe_dir = exe.resolve().parent
         if not exe_dir.is_dir():
             return None
         env = os.environ.copy()
