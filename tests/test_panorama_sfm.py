@@ -9,6 +9,7 @@ Phase 2:
   * explicit failure when neither subcommand nor example script is available
 """
 from __future__ import annotations
+import logging
 from pathlib import Path
 
 import pytest
@@ -124,6 +125,37 @@ def test_requires_frames_dir(monkeypatch, ctx, calls):
     stage = make_stage(monkeypatch, "global")
     with pytest.raises(RuntimeError, match="frames"):
         stage.run(ctx)
+
+
+# ── keep_intermediate handling ───────────────────────────────────────────
+
+def _make_views_dir(ctx) -> Path:
+    views_dir = ctx.work_dir / "panorama" / "images"
+    views_dir.mkdir(parents=True, exist_ok=True)
+    (views_dir / "v_0001.jpg").write_bytes(b"fake")
+    return views_dir
+
+
+def test_keep_intermediate_false_warns_and_removes(monkeypatch, ctx, calls, caplog):
+    stage = make_stage(monkeypatch, "global", keep_intermediate=False)
+    views_dir = _make_views_dir(ctx)
+    with caplog.at_level(logging.WARNING):
+        stage.run(ctx)
+    assert not views_dir.exists()
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("keep_intermediate=False" in r.getMessage() for r in warnings)
+
+
+def test_keep_intermediate_true_keeps_views_no_warning(monkeypatch, ctx, calls, caplog):
+    stage = make_stage(monkeypatch, "global", keep_intermediate=True)
+    views_dir = _make_views_dir(ctx)
+    with caplog.at_level(logging.WARNING):
+        stage.run(ctx)
+    assert views_dir.exists()
+    assert not any(
+        "keep_intermediate" in r.getMessage()
+        for r in caplog.records if r.levelno >= logging.WARNING
+    )
 
 
 # ── route detection / failure modes ──────────────────────────────────────
