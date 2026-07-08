@@ -23,6 +23,8 @@ class VideoSettings:
     usegpu: bool = True
     useframefilter: bool = False
     filtermethod: str = "best_n"            # "best_n" | "threshold"
+    sharp_frame_extraction: bool = False    # pick the sharpest frame per interval
+    sharpness_check_range: int = 10         # window (frames) around interval center; 0 = whole interval
     framestokeep: str = "50%"              # "50%" or integer
     sharpnessthreshold: float = 100.0
     usemultitilt: bool = False
@@ -249,6 +251,8 @@ class Config:
         cfg.video.usegpu = _b("VideoSettings", "usegpu", True)
         cfg.video.useframefilter = _b("VideoSettings", "useframefilter", False)
         cfg.video.filtermethod = _s("VideoSettings", "filtermethod", "best_n")
+        cfg.video.sharp_frame_extraction = _b("VideoSettings", "sharp_frame_extraction", False)
+        cfg.video.sharpness_check_range = _i("VideoSettings", "sharpness_check_range", 10)
         cfg.video.framestokeep = _s("VideoSettings", "framestokeep", "50%")
         cfg.video.sharpnessthreshold = _f("VideoSettings", "sharpnessthreshold", 100.0)
         cfg.video.usemultitilt = _b("VideoSettings", "usemultitilt", False)
