@@ -149,6 +149,50 @@ def test_script_route_used_as_fallback(monkeypatch, ctx, calls, tmp_path):
     assert subcommands(calls)[-1] == "mapper"  # then incremental mapping
 
 
+# ── mask limitation warning (Issue #8) ───────────────────────────────────
+
+def _make_mask_dir(ctx) -> Path:
+    mask_dir = ctx.work_dir / "masked" / "mask_only"
+    mask_dir.mkdir(parents=True)
+    (mask_dir / "frame_0001.mask.png").write_bytes(b"fake")
+    return mask_dir
+
+
+def test_warns_when_masker_output_would_be_ignored(monkeypatch, ctx, calls, caplog):
+    ctx.mask_dir = _make_mask_dir(ctx)
+    stage = make_stage(monkeypatch, "global")
+    with caplog.at_level("WARNING"):
+        stage.run(ctx)
+    assert any("WITHOUT masks" in r.message for r in caplog.records)
+
+
+def test_warns_when_external_masks_would_be_ignored(monkeypatch, ctx, calls, caplog, tmp_path):
+    ext = tmp_path / "external_masks"
+    ext.mkdir()
+    (ext / "frame_0001.png").write_bytes(b"fake")
+    stage = make_stage(monkeypatch, "global")
+    stage.cfg.mask.external_mask_dir = ext
+    with caplog.at_level("WARNING"):
+        stage.run(ctx)
+    assert any("WITHOUT masks" in r.message for r in caplog.records)
+
+
+def test_no_mask_warning_when_masking_disabled(monkeypatch, ctx, calls, caplog):
+    ctx.mask_dir = _make_mask_dir(ctx)
+    stage = make_stage(monkeypatch, "global")
+    stage.cfg.mask.apply_masks_to_sfm = False
+    with caplog.at_level("WARNING"):
+        stage.run(ctx)
+    assert not any("WITHOUT masks" in r.message for r in caplog.records)
+
+
+def test_no_mask_warning_when_no_masks_exist(monkeypatch, ctx, calls, caplog):
+    stage = make_stage(monkeypatch, "global")
+    with caplog.at_level("WARNING"):
+        stage.run(ctx)
+    assert not any("WITHOUT masks" in r.message for r in caplog.records)
+
+
 # ── registry / config integration ────────────────────────────────────────
 
 def test_registry_entries_set_mapper():
