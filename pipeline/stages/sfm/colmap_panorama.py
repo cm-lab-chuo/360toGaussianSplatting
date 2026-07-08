@@ -155,6 +155,16 @@ class PanoramaSFMStage(Stage):
         self._run_mapping(db_path, views_dir, sparse_dir)
 
         if not s.keep_intermediate:
+            logger.warning(
+                "keep_intermediate=False: deleting the virtual perspective views "
+                "(%s). The sparse model's image entries point to these files, so "
+                "downstream steps that read the images (3DGS training, "
+                "`colmap image_undistorter`, dense reconstruction, ...) will NOT "
+                "find them and will fail or silently drop frames. Keep "
+                "[PanoramaSFMSettings] keep_intermediate = True if anything "
+                "after SfM consumes the sparse model.",
+                views_dir,
+            )
             shutil.rmtree(views_dir, ignore_errors=True)
             logger.info("Removed intermediate virtual views: %s", views_dir)
 
