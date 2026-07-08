@@ -8,6 +8,9 @@ Configurable parameters (VideoSettings):
   fps                  — frames per second to extract
   frame_extraction_mode — "seconds" uses fps as a rate; "frames" keeps every Nth frame
   resolutionwidth/height — output frame resolution
+  sharp_frame_extraction — pick the sharpest frame of each interval (OpenCV path,
+                           see sharp_frame_selector.py) instead of the rate tick
+  sharpness_check_range  — candidate window (frames) around each interval center
 """
 from __future__ import annotations
 import logging
@@ -87,6 +90,15 @@ class FFmpegExtractor(Stage):
             shutil.copy2(str(p), str(out_dir / p.name))
 
     def _extract_from_video(self, video: Path, out_dir: Path, v) -> None:
+        if v.sharp_frame_extraction:
+            # Lazy import: keeps the plain ffmpeg path free of the cv2 dependency.
+            from pipeline.stages.preprocessing.sharp_frame_selector import (
+                extract_sharpest_frames,
+            )
+            n = extract_sharpest_frames(video, out_dir, v)
+            logger.info("Sharp frame extraction wrote %d frames.", n)
+            return
+
         out_pattern = str(out_dir / "%06d.jpg")
 
         vf_parts = []
